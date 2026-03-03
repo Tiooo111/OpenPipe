@@ -2,12 +2,13 @@
 
 This folder contains the execution layer for workflow packs.
 
-New in v0.3:
+New in v0.4:
 - Contract validation from `contracts/contract-rules.yaml`
 - Execution state checkpoints (`execution_state.json`)
 - Resume support (`--resume-run-dir`)
 - Event stream log (`execution_events.jsonl`)
 - Node retry/timeout/backoff policy support (workflow-defined)
+- Role/Node executor plugin routing (`template` | `shell`)
 
 ## 1) CLI
 
@@ -46,6 +47,35 @@ Optional flags:
 - `--max-steps <n>`
 - `--resume-run-dir <path>` (resume from saved `execution_state.json`)
 - `--inject-deviation <requirements_mismatch|architecture_mismatch|implementation_bug|verification_gap>`
+
+### Executor plugin routing
+
+Executors are resolved in this order:
+1. `node.executor`
+2. `roles.yaml` role-level `executor`
+3. default `template`
+
+Supported executors (v0.4):
+- `template`: built-in artifact materializer
+- `shell`: run a shell command in run directory
+
+Example role-level executor:
+
+```yaml
+roles:
+  builder:
+    executor:
+      type: shell
+      command: "./scripts/build_pack.sh"
+```
+
+Environment variables available to shell executor:
+- `WF_RUN_DIR`
+- `WF_PACK_ROOT`
+- `WF_NODE_ID`
+- `WF_ROLE`
+- `WF_WORKFLOW_ID`
+- `WF_RUN_ID`
 
 ### Runtime policy in `workflow.yaml`
 

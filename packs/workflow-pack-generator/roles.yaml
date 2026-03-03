@@ -2,6 +2,8 @@ version: "0.1"
 roles:
   orchestrator:
     objective: "Run stage transitions, enforce gates, and route deviations."
+    executor:
+      type: template
     inputs: ["all stage artifacts"]
     outputs: ["stage decision", "pack_manifest.json", "handoff.md"]
     boundaries:
@@ -10,6 +12,8 @@ roles:
 
   requirements-analyst:
     objective: "Align and freeze user intent into testable requirements."
+    executor:
+      type: template
     inputs: ["task_prompt", "user_context", "runtime_constraints"]
     outputs: ["requirements.md", "acceptance_criteria.md", "constraints.md", "open_questions.md"]
     boundaries:
@@ -17,6 +21,8 @@ roles:
 
   workflow-architect:
     objective: "Design role graph, workflow graph, and output contracts."
+    executor:
+      type: template
     inputs: ["requirements.md", "acceptance_criteria.md", "constraints.md"]
     outputs: ["workflow.yaml", "roles.yaml", "contracts_map.md"]
     boundaries:
@@ -24,6 +30,8 @@ roles:
 
   task-planner:
     objective: "Convert architecture into executable task graph and milestones."
+    executor:
+      type: template
     inputs: ["workflow.yaml", "roles.yaml", "acceptance_criteria.md"]
     outputs: ["tasks.yaml", "milestones.md"]
     boundaries:
@@ -31,6 +39,11 @@ roles:
 
   builder:
     objective: "Implement each task and produce runnable pack artifacts."
+    executor:
+      type: template
+      # To use custom shell execution for this role, switch to:
+      # type: shell
+      # command: "./scripts/build_pack.sh"
     inputs: ["tasks.yaml", "contracts_map.md"]
     outputs: ["generated_pack/", "implementation_delta.md"]
     boundaries:
@@ -38,6 +51,8 @@ roles:
 
   verifier:
     objective: "Validate outputs against acceptance criteria and contracts."
+    executor:
+      type: template
     inputs: ["generated_pack/", "acceptance_criteria.md", "contracts/"]
     outputs: ["verification_report.md", "deviation_report.md"]
     boundaries:

@@ -1,7 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import YAML from 'yaml';
 import Ajv from 'ajv';
+
+const execFileP = promisify(execFile);
 
 function parseArgs(argv) {
   const args = {
@@ -73,6 +77,13 @@ async function loadWorkflow(workflowPath) {
   return wf;
 }
 
+async function loadRolesDoc(packRoot) {
+  const p = path.join(packRoot, 'roles.yaml');
+  if (!(await exists(p))) return { roles: {} };
+  const text = await readText(p);
+  return YAML.parse(text) || { roles: {} };
+}
+
 function buildNodeMap(wf) {
   const map = new Map();
   for (const n of wf.nodes || []) map.set(n.id, n);
@@ -101,6 +112,56 @@ async function copyIfExists(src, dst) {
     return true;
   }
   return false;
+}
+
+function resolveExecutorSpec(node, rolesDoc) {
+  const roleSpec = rolesDoc?.roles?.[node.role || '']?.executor || null;
+  const nodeSpec = node?.executor || null;
+
+  const merged = {
+    ...(roleSpec || {}),
+    ...(nodeSpec || {}),
+    config: {
+      ...((roleSpec && roleSpec.config) || {}),
+      ...((nodeSpec && nodeSpec.config) || {}),
+    },
+  };
+
+  const type = merged.type || 'template';
+  return { ...merged, type };
+}
+
+async function runShellExecutor({ node, spec, runDir, packRoot, ctx }) {
+  const cmd = spec.command || spec.config?.command;
+  if (!cmd) {
+    const e = new Error(`shell executor missing command at node ${node.id}`);
+    e.code = 'task_error';
+    throw e;
+  }
+
+  await execFileP('/bin/sh', ['-lc', cmd], {
+    cwd: runDir,
+    env: {
+      ...process.env,
+      WF_RUN_DIR: runDir,
+      WF_PACK_ROOT: packRoot,
+      WF_NODE_ID: node.id,
+      WF_ROLE: node.role || '',
+      WF_WORKFLOW_ID: ctx.workflowId,
+      WF_RUN_ID: ctx.runId,
+    },
+    timeout: 10 * 60 * 1000,
+  });
+}
+
+async function assertDeclaredOutputsExist(outputs, runDir) {
+  const missing = [];
+  for (const out of outputs || []) {
+    const clean = String(out);
+    const p = path.join(runDir, clean);
+    if (!(await exists(p))) missing.push(clean);
+  }
+  return missing;
 }
 
 function normHeading(s) {
@@ -353,16 +414,34 @@ async function withTimeout(promiseFactory, timeoutMs, label = 'task') {
   }
 }
 
-async function executeTaskAttempt({ node, runDir, packRoot, ctx, rules, ajv, schemaCache }) {
-  for (const out of node.outputs || []) {
-    await materializeOutput({
-      outputName: out,
-      node,
-      role: node.role,
-      runDir,
-      packRoot,
-      ctx,
-    });
+async function executeTaskAttempt({ node, rolesDoc, runDir, packRoot, ctx, rules, ajv, schemaCache }) {
+  const spec = resolveExecutorSpec(node, rolesDoc);
+
+  if (spec.type === 'template') {
+    for (const out of node.outputs || []) {
+      await materializeOutput({
+        outputName: out,
+        node,
+        role: node.role,
+        runDir,
+        packRoot,
+        ctx,
+      });
+    }
+  } else if (spec.type === 'shell') {
+    await runShellExecutor({ node, spec, runDir, packRoot, ctx });
+  } else {
+    const err = new Error(`unsupported_executor:${spec.type}`);
+    err.code = 'task_error';
+    throw err;
+  }
+
+  const missing = await assertDeclaredOutputsExist(node.outputs || [], runDir);
+  if (missing.length) {
+    const err = new Error('declared_outputs_missing');
+    err.code = 'task_error';
+    err.missingOutputs = missing;
+    throw err;
   }
 
   const { violations } = await validateOutputsContracts(
@@ -381,7 +460,7 @@ async function executeTaskAttempt({ node, runDir, packRoot, ctx, rules, ajv, sch
     throw err;
   }
 
-  return { ok: true };
+  return { ok: true, executor: spec.type };
 }
 
 async function run() {
@@ -391,6 +470,7 @@ async function run() {
   const nodeMap = buildNodeMap(wf);
   const runDir = resolveRunDir(args);
   const packRoot = path.dirname(workflowPath);
+  const rolesDoc = await loadRolesDoc(packRoot);
 
   await ensureDir(runDir);
 
@@ -471,13 +551,14 @@ async function run() {
         };
 
         try {
-          await withTimeout(
-            () => executeTaskAttempt({ node, runDir, packRoot, ctx, rules, ajv, schemaCache }),
+          const attemptOut = await withTimeout(
+            () => executeTaskAttempt({ node, rolesDoc, runDir, packRoot, ctx, rules, ajv, schemaCache }),
             policy.timeoutMs,
             node.id
           );
 
           attemptRec.result = 'ok';
+          attemptRec.executor = attemptOut?.executor || 'template';
           attemptRec.finishedAt = new Date().toISOString();
           h.attempts.push(attemptRec);
           succeeded = true;

@@ -44,3 +44,5 @@ Outputs are written under `.runs/<run-id>/` with:
 This pack also includes machine-checkable output contracts in:
 - `contracts/contract-rules.yaml`
 - `contracts/*.schema.json`
+
+Role-level executor defaults are declared in `roles.yaml` (currently `template`, with optional `shell` example for builder).
