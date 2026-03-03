@@ -9,9 +9,12 @@
     "wf:list": "node engine/wf-cli.js list",
     "wf:run": "node engine/wf-cli.js run",
     "wf:api": "node engine/wf-api.js",
-    "wf:rpc": "node engine/wf-rpc-stdio.js"
+    "wf:rpc": "node engine/wf-rpc-stdio.js",
+    "wf:mcp": "node engine/wf-mcp-server.js"
   },
   "dependencies": {
-    "yaml": "^2.8.1"
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "yaml": "^2.8.1",
+    "zod": "^4.3.6"
   }
 }

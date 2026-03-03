@@ -67,7 +67,7 @@ curl -X POST http://127.0.0.1:8787/workflows/workflow-pack-generator/run \
   -d '{"dryRun": true}'
 ```
 
-## 3) StdIO RPC (MCP-friendly adapter)
+## 3) StdIO RPC (lightweight)
 
 Start server:
 
@@ -85,3 +85,18 @@ Example request line:
 ```json
 {"id":1,"method":"run_workflow","params":{"packId":"workflow-pack-generator","dryRun":true}}
 ```
+
+## 4) MCP Server (tool integration)
+
+Start MCP stdio server:
+
+```bash
+npm run wf:mcp
+```
+
+Exposed MCP tools:
+
+- `list_workflows`
+- `run_workflow`
+
+This lets external MCP clients call workflow packs directly without going through REST.
