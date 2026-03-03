@@ -1,0 +1,14 @@
+{
+  "packId": "workflow-pack-generator",
+  "version": "0.1",
+  "artifacts": [
+    "requirements.md",
+    "acceptance_criteria.md",
+    "constraints.md",
+    "workflow.yaml",
+    "roles.yaml",
+    "tasks.yaml",
+    "verification_report.md",
+    "deviation_report.md"
+  ]
+}

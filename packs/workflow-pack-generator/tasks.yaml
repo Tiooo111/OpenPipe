@@ -1,0 +1,39 @@
+version: "0.1"
+backlog:
+  - id: T1
+    name: "Capture requirements and constraints"
+    owner: requirements-analyst
+    dependsOn: []
+    doneWhen:
+      - "requirements.md approved"
+      - "acceptance_criteria.md measurable"
+
+  - id: T2
+    name: "Design workflow and role topology"
+    owner: workflow-architect
+    dependsOn: [T1]
+    doneWhen:
+      - "workflow.yaml valid"
+      - "roles.yaml complete"
+
+  - id: T3
+    name: "Plan implementation milestones"
+    owner: task-planner
+    dependsOn: [T2]
+    doneWhen:
+      - "tasks.yaml has dependencies and owners"
+
+  - id: T4
+    name: "Implement generated pack"
+    owner: builder
+    dependsOn: [T3]
+    doneWhen:
+      - "generated_pack produced"
+
+  - id: T5
+    name: "Run verification and deviation analysis"
+    owner: verifier
+    dependsOn: [T4]
+    doneWhen:
+      - "verification_report.md complete"
+      - "deviation_report.md complete"

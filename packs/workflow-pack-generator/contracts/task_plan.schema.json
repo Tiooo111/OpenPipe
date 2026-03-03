@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TaskPlan",
+  "type": "object",
+  "required": ["tasks"],
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner", "doneWhen"],
+        "properties": {
+          "id": { "type": "string" },
+          "owner": { "type": "string" },
+          "doneWhen": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

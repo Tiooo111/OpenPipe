@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Requirements",
+  "type": "object",
+  "required": ["problemStatement", "inScope", "outOfScope", "successCriteria"],
+  "properties": {
+    "problemStatement": { "type": "string", "minLength": 10 },
+    "inScope": { "type": "array", "items": { "type": "string" } },
+    "outOfScope": { "type": "array", "items": { "type": "string" } },
+    "successCriteria": { "type": "array", "items": { "type": "string" } }
+  }
+}

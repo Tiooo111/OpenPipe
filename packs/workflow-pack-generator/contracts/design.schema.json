@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DesignArtifact",
+  "type": "object",
+  "required": ["workflow", "roles"],
+  "properties": {
+    "workflow": { "type": "string" },
+    "roles": { "type": "string" },
+    "contractsMap": { "type": "string" }
+  }
+}

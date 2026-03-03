@@ -1,0 +1,106 @@
+version: "0.1"
+id: workflow-pack-generator
+name: Workflow Pack Generator
+mode: state-machine
+entryNode: align_requirements
+
+inputs:
+  - name: task_prompt
+    type: string
+    required: true
+  - name: user_context
+    type: string
+    required: false
+  - name: runtime_constraints
+    type: object
+    required: false
+
+artifacts:
+  root: ./artifacts/workflow-pack-generator
+  required:
+    - requirements.md
+    - acceptance_criteria.md
+    - constraints.md
+    - workflow.yaml
+    - roles.yaml
+    - tasks.yaml
+    - verification_report.md
+    - deviation_report.md
+    - pack_manifest.json
+
+nodes:
+  - id: align_requirements
+    role: requirements-analyst
+    outputs:
+      - requirements.md
+      - acceptance_criteria.md
+      - constraints.md
+      - open_questions.md
+    next: gate_alignment
+
+  - id: gate_alignment
+    role: orchestrator
+    gate:
+      checks:
+        - "requirements.md exists"
+        - "acceptance_criteria.md contains measurable criteria"
+        - "open_questions.md is empty OR user-approved"
+      onPass: design_framework
+      onFail: align_requirements
+
+  - id: design_framework
+    role: workflow-architect
+    outputs:
+      - workflow.yaml
+      - roles.yaml
+      - contracts_map.md
+    next: gate_design
+
+  - id: gate_design
+    role: orchestrator
+    gate:
+      checks:
+        - "every workflow node has owner role"
+        - "every edge has success/failure condition"
+        - "contracts are mapped for every stage output"
+      onPass: plan_tasks
+      onFail: design_framework
+
+  - id: plan_tasks
+    role: task-planner
+    outputs:
+      - tasks.yaml
+      - milestones.md
+    next: implement_tasks
+
+  - id: implement_tasks
+    role: builder
+    outputs:
+      - implementation_delta.md
+      - generated_pack/
+    next: verify_pack
+
+  - id: verify_pack
+    role: verifier
+    outputs:
+      - verification_report.md
+      - deviation_report.md
+    next: route_deviation
+
+  - id: route_deviation
+    role: orchestrator
+    router:
+      matrix: templates/deviation-routing-matrix.md
+      onNoDeviation: finalize_pack
+      onDeviation:
+        requirements_mismatch: align_requirements
+        architecture_mismatch: design_framework
+        implementation_bug: implement_tasks
+        verification_gap: verify_pack
+
+  - id: finalize_pack
+    role: orchestrator
+    outputs:
+      - pack_manifest.json
+      - handoff.md
+    next: end

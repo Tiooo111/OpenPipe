@@ -1,0 +1,44 @@
+version: "0.1"
+roles:
+  orchestrator:
+    objective: "Run stage transitions, enforce gates, and route deviations."
+    inputs: ["all stage artifacts"]
+    outputs: ["stage decision", "pack_manifest.json", "handoff.md"]
+    boundaries:
+      - "Must not rewrite requirements without going through requirements-analyst."
+      - "Must not skip gates."
+
+  requirements-analyst:
+    objective: "Align and freeze user intent into testable requirements."
+    inputs: ["task_prompt", "user_context", "runtime_constraints"]
+    outputs: ["requirements.md", "acceptance_criteria.md", "constraints.md", "open_questions.md"]
+    boundaries:
+      - "requirements.md is SSOT; no implementation details unless required by constraints."
+
+  workflow-architect:
+    objective: "Design role graph, workflow graph, and output contracts."
+    inputs: ["requirements.md", "acceptance_criteria.md", "constraints.md"]
+    outputs: ["workflow.yaml", "roles.yaml", "contracts_map.md"]
+    boundaries:
+      - "Must preserve SSOT and acceptance criteria."
+
+  task-planner:
+    objective: "Convert architecture into executable task graph and milestones."
+    inputs: ["workflow.yaml", "roles.yaml", "acceptance_criteria.md"]
+    outputs: ["tasks.yaml", "milestones.md"]
+    boundaries:
+      - "No new scope without explicit requirement delta."
+
+  builder:
+    objective: "Implement each task and produce runnable pack artifacts."
+    inputs: ["tasks.yaml", "contracts_map.md"]
+    outputs: ["generated_pack/", "implementation_delta.md"]
+    boundaries:
+      - "Must follow contracts and task order."
+
+  verifier:
+    objective: "Validate outputs against acceptance criteria and contracts."
+    inputs: ["generated_pack/", "acceptance_criteria.md", "contracts/"]
+    outputs: ["verification_report.md", "deviation_report.md"]
+    boundaries:
+      - "No code changes; report only."
