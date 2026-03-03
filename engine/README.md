@@ -1,14 +1,16 @@
-# Workflow Engine (v0.2)
+# Workflow Engine (v0.6)
 
 This folder contains the execution layer for OpenPipe pipes/workflows.
 
-New in v0.4:
+Current capabilities:
 - Contract validation from `contracts/contract-rules.yaml`
 - Execution state checkpoints (`execution_state.json`)
 - Resume support (`--resume-run-dir`)
 - Event stream log (`execution_events.jsonl`)
 - Node retry/timeout/backoff policy support (workflow-defined)
-- Role/Node executor plugin routing (`template` | `shell`)
+- Role/Node executor plugin routing (`template` | `shell` | `script` | `llm`)
+- Workflow discovery and metadata describe APIs
+- Workflow input contract validation (`workflow.yaml.inputs`)
 
 ## 1) CLI
 
@@ -16,14 +18,17 @@ List pipes/workflows:
 
 ```bash
 npm run wf:list
+npm run wf:list -- --details
+node engine/wf-cli.js describe metapipe
+npm run wf:validate -- metapipe
 ```
 
 Run a pipe:
 
 ```bash
-node engine/wf-cli.js run metapipe
+node engine/wf-cli.js run metapipe --dry-run
 # or
-npm run wf:run -- metapipe
+npm run wf:run -- metapipe --input task_prompt="Build an incident response workflow"
 ```
 
 Optional global command (from repo root, if your environment allows `npm link`):
@@ -47,6 +52,8 @@ Optional flags:
 - `--max-steps <n>`
 - `--resume-run-dir <path>` (resume from saved `execution_state.json`)
 - `--inject-deviation <requirements_mismatch|architecture_mismatch|implementation_bug|verification_gap>`
+- `--input key=value` (repeatable)
+- `--inputs-json '{"task_prompt":"..."}'`
 
 ### Executor plugin routing
 
@@ -55,7 +62,7 @@ Executors are resolved in this order:
 2. `roles.yaml` role-level `executor`
 3. default `template`
 
-Supported executors (v0.5):
+Supported executors (v0.6):
 - `template`: built-in artifact materializer
 - `shell`: run a shell command in run directory
 - `script`: run a Node script file
@@ -94,6 +101,7 @@ Environment variables available to shell/script executor:
 - `WF_ROLE`
 - `WF_WORKFLOW_ID`
 - `WF_RUN_ID`
+- `WF_INPUTS_JSON`
 
 For `llm` executor:
 - Model response must be a JSON object mapping declared output filenames to content.
@@ -138,6 +146,15 @@ Health check:
 curl http://127.0.0.1:8787/health
 ```
 
+Discover workflows:
+
+```bash
+curl http://127.0.0.1:8787/workflows
+curl "http://127.0.0.1:8787/workflows?details=true"
+curl http://127.0.0.1:8787/workflows/metapipe
+curl http://127.0.0.1:8787/workflows/metapipe/validate
+```
+
 OpenAPI spec:
 
 ```bash
@@ -149,7 +166,7 @@ Run pipe:
 ```bash
 curl -X POST http://127.0.0.1:8787/workflows/metapipe/run \
   -H 'content-type: application/json' \
-  -d '{"dryRun": true}'
+  -d '{"inputs":{"task_prompt":"Design a support triage workflow"}}'
 ```
 
 ## 3) StdIO RPC (lightweight)
@@ -162,13 +179,15 @@ npm run wf:rpc
 
 Methods (JSON line protocol):
 
-- `list_workflows`
-- `run_workflow` with params `{ packId, dryRun, runDir, resumeRunDir, maxSteps, injectDeviation }`
+- `list_workflows` (optional params: `{ details: true }`)
+- `describe_workflow` with params `{ packId }`
+- `validate_workflow` with params `{ packId }`
+- `run_workflow` with params `{ packId, dryRun, runDir, resumeRunDir, maxSteps, injectDeviation, inputs }`
 
 Example request line:
 
 ```json
-{"id":1,"method":"run_workflow","params":{"packId":"metapipe","dryRun":true}}
+{"id":1,"method":"run_workflow","params":{"packId":"metapipe","inputs":{"task_prompt":"Create an onboarding workflow"}}}
 ```
 
 ## 4) MCP Server (tool integration)
@@ -182,6 +201,8 @@ npm run wf:mcp
 Exposed MCP tools:
 
 - `list_workflows`
+- `describe_workflow`
+- `validate_workflow`
 - `run_workflow`
 
 This lets external MCP clients call OpenPipe pipes directly without going through REST.

@@ -23,13 +23,17 @@ Given a task description, MetaPipe produces:
 
 ```bash
 cd /home/node/.openclaw/workspace-scholar
+npm run wf:validate -- metapipe
 npm run wf:run -- metapipe --dry-run
+
+# recommended real input run
+npm run wf:run -- metapipe --input task_prompt="Design an internal incident triage workflow"
 ```
 
 Optional deviation injection:
 
 ```bash
-npm run wf:run -- metapipe --inject-deviation implementation_bug
+npm run wf:run -- metapipe --inject-deviation implementation_bug --input task_prompt="Design a billing approval workflow"
 ```
 
 Outputs are written under `.runs/<run-id>/` with:

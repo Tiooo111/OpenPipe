@@ -8,15 +8,18 @@
 - `wf-api.js`: REST API surface
 - `wf-rpc-stdio.js`: stdio JSON-RPC surface
 - `wf-mcp-server.js`: MCP tool surface
-- `wf-core.js`: shared run/list utilities
+- `wf-core.js`: shared discovery/validate/run utilities
 
 Responsibilities:
 - Node execution (task/gate/router)
 - Retry/timeout/backoff policy
 - Contract validation (rules + schema)
+- Input contract validation (`workflow.yaml.inputs`)
 - Checkpoint/resume
 - Event/audit output
 - Executor plugin routing (`template`, `shell`, `script`, `llm`)
+- Discovery/describe APIs for workflow metadata
+- Preflight validation APIs for workflow graph/contracts
 
 ### 2) Pipes (`pipes/<pipe-id>/`)
 - `workflow.yaml`: orchestration graph + policy
@@ -55,7 +58,7 @@ Deviations are classified and routed back to designated stages/roles:
 
 ## Invocation Surfaces
 
-- CLI (`wf`)
-- REST (`/workflows/:packId/run`)
-- StdIO RPC (`list_workflows`, `run_workflow`)
-- MCP tools (`list_workflows`, `run_workflow`)
+- CLI (`wf list|describe|validate|run`)
+- REST (`/workflows`, `/workflows/:packId`, `/workflows/:packId/validate`, `/workflows/:packId/run`)
+- StdIO RPC (`list_workflows`, `describe_workflow`, `validate_workflow`, `run_workflow`)
+- MCP tools (`list_workflows`, `describe_workflow`, `validate_workflow`, `run_workflow`)

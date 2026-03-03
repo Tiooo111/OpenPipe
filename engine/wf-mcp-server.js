@@ -2,24 +2,64 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { listPacks, runPack } from './wf-core.js';
+import { describePack, listPackDetails, listPacks, runPack, validatePack } from './wf-core.js';
 
 const server = new McpServer({
-  name: 'scholar-workflow-engine',
-  version: '0.1.0',
+  name: 'openpipe-workflow-engine',
+  version: '0.2.0',
 });
 
 server.tool(
   'list_workflows',
   'List available workflow packs',
-  {},
-  async () => {
-    const packs = await listPacks();
+  {
+    details: z.boolean().optional(),
+  },
+  async (args) => {
+    const packs = args?.details ? await listPackDetails() : await listPacks();
     return {
       content: [
         {
           type: 'text',
           text: JSON.stringify({ ok: true, packs }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'describe_workflow',
+  'Describe a workflow pack and its input/output contract',
+  {
+    packId: z.string().min(1),
+  },
+  async (args) => {
+    const pack = await describePack(args.packId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: true, packId: args.packId, pack }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'validate_workflow',
+  'Validate workflow graph, role bindings, and contract references',
+  {
+    packId: z.string().min(1),
+  },
+  async (args) => {
+    const validation = await validatePack(args.packId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: validation.ok, packId: args.packId, validation }, null, 2),
         },
       ],
     };
@@ -35,6 +75,7 @@ server.tool(
     runDir: z.string().optional(),
     resumeRunDir: z.string().optional(),
     maxSteps: z.number().int().positive().optional(),
+    inputs: z.record(z.any()).optional(),
     injectDeviation: z
       .enum([
         'requirements_mismatch',

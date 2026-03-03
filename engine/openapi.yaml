@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: OpenPipe Workflow API
-  version: 0.2.0
-  description: Minimal API for running OpenPipe pipes/workflows.
+  version: 0.4.0
+  description: API for discovering, validating, and running OpenPipe workflows/pipes.
 servers:
   - url: http://127.0.0.1:8787
 paths:
@@ -12,9 +12,54 @@ paths:
       responses:
         '200':
           description: OK
+
+  /workflows:
+    get:
+      summary: List workflows
+      parameters:
+        - in: query
+          name: details
+          required: false
+          schema:
+            type: boolean
+          description: Include workflow metadata summaries when true.
+      responses:
+        '200':
+          description: Workflow list
+
+  /workflows/{packId}:
+    get:
+      summary: Describe one workflow
+      parameters:
+        - in: path
+          name: packId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow metadata
+        '404':
+          description: Workflow not found
+
+  /workflows/{packId}/validate:
+    get:
+      summary: Validate workflow graph/contracts before execution
+      parameters:
+        - in: path
+          name: packId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Workflow is valid
+        '422':
+          description: Workflow validation failed
+
   /workflows/{packId}/run:
     post:
-      summary: Run a pipe/workflow (compat route)
+      summary: Run a workflow
       parameters:
         - in: path
           name: packId
@@ -26,24 +71,59 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                runDir:
-                  type: string
-                maxSteps:
-                  type: integer
-                dryRun:
-                  type: boolean
-                resumeRunDir:
-                  type: string
-                injectDeviation:
-                  type: string
+              $ref: '#/components/schemas/RunRequest'
       responses:
         '200':
-          description: Run accepted and completed
+          description: Run completed
+        '400':
+          description: Invalid request
+        '422':
+          description: Workflow validation failed
+
+  /pipes:
+    get:
+      summary: Alias of /workflows
+      parameters:
+        - in: query
+          name: details
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Pipe list
+
+  /pipes/{pipeId}:
+    get:
+      summary: Alias of /workflows/{packId}
+      parameters:
+        - in: path
+          name: pipeId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipe metadata
+
+  /pipes/{pipeId}/validate:
+    get:
+      summary: Alias of /workflows/{packId}/validate
+      parameters:
+        - in: path
+          name: pipeId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipe valid
+        '422':
+          description: Pipe invalid
+
   /pipes/{pipeId}/run:
     post:
-      summary: Run a pipe
+      summary: Alias of /workflows/{packId}/run
       parameters:
         - in: path
           name: pipeId
@@ -55,24 +135,38 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                runDir:
-                  type: string
-                maxSteps:
-                  type: integer
-                dryRun:
-                  type: boolean
-                resumeRunDir:
-                  type: string
-                injectDeviation:
-                  type: string
+              $ref: '#/components/schemas/RunRequest'
       responses:
         '200':
-          description: Run accepted and completed
+          description: Run completed
+
   /openapi.yaml:
     get:
       summary: OpenAPI spec
       responses:
         '200':
           description: OpenAPI YAML
+
+components:
+  schemas:
+    RunRequest:
+      type: object
+      properties:
+        runDir:
+          type: string
+        resumeRunDir:
+          type: string
+        maxSteps:
+          type: integer
+        dryRun:
+          type: boolean
+        injectDeviation:
+          type: string
+          enum:
+            - requirements_mismatch
+            - architecture_mismatch
+            - implementation_bug
+            - verification_gap
+        inputs:
+          type: object
+          additionalProperties: true

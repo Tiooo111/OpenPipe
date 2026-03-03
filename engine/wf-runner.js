@@ -15,6 +15,7 @@ function parseArgs(argv) {
     maxSteps: 40,
     dryRun: false,
     injectDeviation: null,
+    inputsJson: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -25,6 +26,7 @@ function parseArgs(argv) {
     else if (a === '--max-steps') args.maxSteps = Number(argv[++i] || 40);
     else if (a === '--dry-run') args.dryRun = true;
     else if (a === '--inject-deviation') args.injectDeviation = argv[++i];
+    else if (a === '--inputs-json') args.inputsJson = argv[++i];
   }
   return args;
 }
@@ -86,6 +88,106 @@ async function loadWorkflow(workflowPath) {
     throw new Error(`Invalid workflow: nodes missing in ${workflowPath}`);
   }
   return wf;
+}
+
+function parseInputsJson(raw) {
+  if (!raw) return {};
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const e = new Error('input_validation_error:[{"field":"inputs","code":"invalid_json"}]');
+    e.code = 'input_validation_error';
+    throw e;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    const e = new Error('input_validation_error:[{"field":"inputs","code":"must_be_object"}]');
+    e.code = 'input_validation_error';
+    throw e;
+  }
+
+  return parsed;
+}
+
+function withDryRunInputDefaults(wf, inputs, dryRun) {
+  if (!dryRun) return inputs;
+  const out = { ...(inputs || {}) };
+  for (const def of (wf?.inputs || [])) {
+    if (!def?.required) continue;
+    const name = def?.name;
+    if (!name || out[name] != null) continue;
+
+    const t = String(def?.type || 'string').toLowerCase();
+    if (t === 'string') out[name] = `(dry-run placeholder for ${name})`;
+    else if (t === 'number') out[name] = 0;
+    else if (t === 'boolean') out[name] = false;
+    else if (t === 'array') out[name] = [];
+    else out[name] = {};
+  }
+  return out;
+}
+
+function validateWorkflowInputs(wf, inputs) {
+  const errors = [];
+  for (const def of (wf?.inputs || [])) {
+    const name = def?.name;
+    if (!name) continue;
+
+    const required = !!def?.required;
+    const type = String(def?.type || 'string').toLowerCase();
+    const value = inputs?.[name];
+
+    if (required && (value == null || value === '')) {
+      errors.push({ field: name, code: 'required_missing', message: `${name} is required` });
+      continue;
+    }
+
+    if (value == null) continue;
+
+    const ok = (
+      (type === 'string' && typeof value === 'string')
+      || (type === 'number' && typeof value === 'number' && Number.isFinite(value))
+      || (type === 'boolean' && typeof value === 'boolean')
+      || (type === 'object' && typeof value === 'object' && !Array.isArray(value) && value !== null)
+      || (type === 'array' && Array.isArray(value))
+      || (!['string', 'number', 'boolean', 'object', 'array'].includes(type))
+    );
+
+    if (!ok) {
+      errors.push({
+        field: name,
+        code: 'type_mismatch',
+        expected: type,
+        got: Array.isArray(value) ? 'array' : typeof value,
+      });
+    }
+  }
+
+  return errors;
+}
+
+function buildTemplateVars({ node, ctx, extra = {} }) {
+  const vars = {
+    nodeId: node?.id || '',
+    role: node?.role || '',
+    workflowId: ctx?.workflowId || '',
+    runId: ctx?.runId || '',
+    outputs: JSON.stringify(node?.outputs || []),
+    generatedAt: new Date().toISOString(),
+    inputsJson: JSON.stringify(ctx?.inputs || {}),
+    taskPrompt: String(ctx?.inputs?.task_prompt ?? ''),
+    userContext: String(ctx?.inputs?.user_context ?? ''),
+    runtimeConstraints: JSON.stringify(ctx?.inputs?.runtime_constraints ?? {}),
+    ...extra,
+  };
+
+  for (const [k, v] of Object.entries(ctx?.inputs || {})) {
+    const safeKey = `input_${String(k).replace(/[^a-zA-Z0-9_]/g, '_')}`;
+    vars[safeKey] = typeof v === 'string' ? v : JSON.stringify(v);
+  }
+
+  return vars;
 }
 
 async function loadRolesDoc(packRoot) {
@@ -160,6 +262,7 @@ async function runShellExecutor({ node, spec, runDir, packRoot, ctx }) {
       WF_ROLE: node.role || '',
       WF_WORKFLOW_ID: ctx.workflowId,
       WF_RUN_ID: ctx.runId,
+      WF_INPUTS_JSON: JSON.stringify(ctx.inputs || {}),
     },
     timeout: 10 * 60 * 1000,
   });
@@ -191,6 +294,7 @@ async function runScriptExecutor({ node, spec, runDir, packRoot, ctx }) {
       WF_ROLE: node.role || '',
       WF_WORKFLOW_ID: ctx.workflowId,
       WF_RUN_ID: ctx.runId,
+      WF_INPUTS_JSON: JSON.stringify(ctx.inputs || {}),
     },
     timeout: 10 * 60 * 1000,
   });
@@ -254,12 +358,10 @@ async function runLLMExecutor({ node, rolesDoc, spec, runDir, packRoot, ctx }) {
     || spec.config?.prompt
     || 'Generate declared outputs for node {{nodeId}} as JSON object: {"filename":"content"}';
 
-  const userPrompt = renderTemplateText(userTemplate, {
-    nodeId: node.id,
-    role: node.role || '',
-    outputs: JSON.stringify(node.outputs || []),
-    workflowId: ctx.workflowId,
-  });
+  const userPrompt = renderTemplateText(
+    userTemplate,
+    buildTemplateVars({ node, ctx })
+  );
 
   const systemPrompt = spec.systemPrompt
     || spec.config?.systemPrompt
@@ -279,7 +381,7 @@ async function runLLMExecutor({ node, rolesDoc, spec, runDir, packRoot, ctx }) {
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
-        content: `${userPrompt}\n\nDeclared outputs: ${JSON.stringify(node.outputs || [])}`,
+        content: `${userPrompt}\n\nDeclared outputs: ${JSON.stringify(node.outputs || [])}\nInputs: ${JSON.stringify(ctx.inputs || {})}`,
       },
     ],
   };
@@ -461,11 +563,17 @@ async function materializeOutput({ outputName, node, role, runDir, packRoot, ctx
       version: '0.1',
       runId: ctx.runId,
       generatedAt: new Date().toISOString(),
+      inputs: ctx.inputs || {},
       artifacts: [...ctx.artifacts],
     };
     await writeText(outPath, `${JSON.stringify(manifest, null, 2)}\n`);
   } else if (base.endsWith('.md') && await exists(templatePath)) {
-    await copyIfExists(templatePath, outPath);
+    const template = await readText(templatePath);
+    const rendered = renderTemplateText(
+      template,
+      buildTemplateVars({ node, ctx, extra: { fileName: base } })
+    );
+    await writeText(outPath, rendered);
   } else if (base.endsWith('.json')) {
     await writeText(outPath, '{}\n');
   } else {
@@ -666,15 +774,42 @@ async function run() {
 
   const resumed = args.resumeRunDir ? (await loadState(runDir)) : null;
 
+  const providedInputsRaw = parseInputsJson(args.inputsJson);
+  const providedInputs = withDryRunInputDefaults(wf, providedInputsRaw, args.dryRun);
+
+  if (!resumed) {
+    const inputErrors = validateWorkflowInputs(wf, providedInputs);
+    if (inputErrors.length) {
+      const e = new Error(`input_validation_error:${JSON.stringify(inputErrors)}`);
+      e.code = 'input_validation_error';
+      throw e;
+    }
+  }
+
+  if (resumed && args.inputsJson) {
+    const resumedInputs = resumed?.ctx?.inputs || {};
+    const mismatch = JSON.stringify(resumedInputs) !== JSON.stringify(providedInputsRaw);
+    if (mismatch) {
+      const e = new Error('input_validation_error:[{"field":"inputs","code":"resume_inputs_mismatch","message":"provided inputs differ from checkpoint state"}]');
+      e.code = 'input_validation_error';
+      throw e;
+    }
+  }
+
   const ctx = resumed?.ctx || {
     runId: path.basename(runDir),
     workflowId: wf.id || 'workflow',
     artifacts: [],
+    inputs: providedInputs,
     injectDeviation: args.injectDeviation,
     injectedDeviation: false,
     forcedDeviation: null,
     contractViolations: [],
   };
+
+  if (!ctx.inputs || typeof ctx.inputs !== 'object' || Array.isArray(ctx.inputs)) {
+    ctx.inputs = providedInputs;
+  }
 
   const history = resumed?.history || [];
   let current = resumed?.current || wf.entryNode;
@@ -837,6 +972,7 @@ async function run() {
     terminatedBy: current === 'end' ? 'end' : (steps >= args.maxSteps ? 'maxSteps' : 'unknown'),
     history,
     artifacts: [...new Set(ctx.artifacts)],
+    inputs: ctx.inputs || {},
     contractViolations: ctx.contractViolations,
   };
 

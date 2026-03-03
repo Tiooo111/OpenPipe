@@ -7,6 +7,7 @@
   },
   "scripts": {
     "wf:list": "node engine/wf-cli.js list",
+    "wf:validate": "node engine/wf-cli.js validate",
     "wf:run": "node engine/wf-cli.js run",
     "wf:api": "node engine/wf-api.js",
     "wf:rpc": "node engine/wf-rpc-stdio.js",

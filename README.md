@@ -55,21 +55,27 @@ List workflows:
 
 ```bash
 npm run wf:list
+npm run wf:list -- --details
+node engine/wf-cli.js describe metapipe
+npm run wf:validate -- metapipe
 ```
 
 Run MetaPipe:
 
 ```bash
 npm run wf:run -- metapipe --dry-run
+# or provide explicit inputs
+npm run wf:run -- metapipe --input task_prompt="Design a customer support triage workflow"
 ```
 
 REST call:
 
 ```bash
 npm run wf:api
+curl http://127.0.0.1:8787/workflows/metapipe/validate
 curl -X POST http://127.0.0.1:8787/workflows/metapipe/run \
   -H 'content-type: application/json' \
-  -d '{"dryRun": true}'
+  -d '{"inputs":{"task_prompt":"Design a customer support triage workflow"}}'
 ```
 
 MCP server:
