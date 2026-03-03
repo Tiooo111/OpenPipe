@@ -4,6 +4,7 @@ import { URL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
+import fs from 'node:fs/promises';
 
 const execFileP = promisify(execFile);
 
@@ -55,6 +56,14 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && u.pathname === '/health') {
       return json(res, 200, { ok: true, service: 'wf-api', port: PORT });
+    }
+
+    if (req.method === 'GET' && u.pathname === '/openapi.yaml') {
+      const p = path.resolve('engine', 'openapi.yaml');
+      const body = await fs.readFile(p, 'utf-8');
+      res.writeHead(200, { 'content-type': 'application/yaml; charset=utf-8' });
+      res.end(body);
+      return;
     }
 
     if (req.method === 'POST' && u.pathname.startsWith('/workflows/')) {

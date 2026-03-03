@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: Scholar Workflow Engine API
+  version: 0.1.0
+  description: Minimal API for running workflow packs.
+servers:
+  - url: http://127.0.0.1:8787
+paths:
+  /health:
+    get:
+      summary: Service health
+      responses:
+        '200':
+          description: OK
+  /workflows/{packId}/run:
+    post:
+      summary: Run a workflow pack
+      parameters:
+        - in: path
+          name: packId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                runDir:
+                  type: string
+                maxSteps:
+                  type: integer
+                dryRun:
+                  type: boolean
+                injectDeviation:
+                  type: string
+      responses:
+        '200':
+          description: Run accepted and completed
+  /openapi.yaml:
+    get:
+      summary: OpenAPI spec
+      responses:
+        '200':
+          description: OpenAPI YAML

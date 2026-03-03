@@ -18,6 +18,20 @@ node engine/wf-cli.js run workflow-pack-generator
 npm run wf:run -- workflow-pack-generator
 ```
 
+Optional global command (from repo root, if your environment allows `npm link`):
+
+```bash
+npm link
+wf list
+wf run workflow-pack-generator --dry-run
+```
+
+If `npm link` is restricted, keep using:
+
+```bash
+node engine/wf-cli.js <command>
+```
+
 Optional flags:
 
 - `--dry-run`
@@ -37,6 +51,12 @@ Health check:
 
 ```bash
 curl http://127.0.0.1:8787/health
+```
+
+OpenAPI spec:
+
+```bash
+curl http://127.0.0.1:8787/openapi.yaml
 ```
 
 Run workflow pack:

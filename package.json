@@ -1,7 +1,10 @@
 {
-  "name": "workspace-scholar",
+  "name": "scholar-workflow-engine",
   "private": true,
   "type": "module",
+  "bin": {
+    "wf": "engine/wf-cli.js"
+  },
   "scripts": {
     "wf:list": "node engine/wf-cli.js list",
     "wf:run": "node engine/wf-cli.js run",
