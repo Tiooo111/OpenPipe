@@ -4,6 +4,18 @@ name: Workflow Pack Generator
 mode: state-machine
 entryNode: align_requirements
 
+runtime:
+  policy:
+    timeoutMs: 12000
+    retries:
+      maxAttempts: 2
+      backoffMs: 200
+      backoffMultiplier: 2
+      retryOn:
+        - task_error
+        - timeout
+        - contract_violation
+
 inputs:
   - name: task_prompt
     type: string
@@ -75,6 +87,13 @@ nodes:
 
   - id: implement_tasks
     role: builder
+    policy:
+      timeoutMs: 20000
+      retries:
+        maxAttempts: 3
+        backoffMs: 300
+        backoffMultiplier: 2
+        retryOn: [task_error, timeout, contract_violation]
     outputs:
       - implementation_delta.md
       - generated_pack/
@@ -82,6 +101,12 @@ nodes:
 
   - id: verify_pack
     role: verifier
+    policy:
+      retries:
+        maxAttempts: 2
+        backoffMs: 250
+        backoffMultiplier: 2
+        retryOn: [task_error, timeout]
     outputs:
       - verification_report.md
       - deviation_report.md

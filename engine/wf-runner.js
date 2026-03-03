@@ -309,6 +309,81 @@ async function saveState(runDir, state) {
   await writeText(p, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms || 0)));
+}
+
+function resolveNodePolicy(wf, node) {
+  const globalPolicy = wf?.runtime?.policy || {};
+  const nodePolicy = node?.policy || {};
+
+  const globalRetries = globalPolicy.retries || {};
+  const nodeRetries = nodePolicy.retries || {};
+
+  const maxAttempts = Math.max(1, Number(nodeRetries.maxAttempts ?? globalRetries.maxAttempts ?? 1));
+  const backoffMs = Math.max(0, Number(nodeRetries.backoffMs ?? globalRetries.backoffMs ?? 0));
+  const backoffMultiplier = Math.max(1, Number(nodeRetries.backoffMultiplier ?? globalRetries.backoffMultiplier ?? 1));
+  const timeoutMs = Math.max(0, Number(nodePolicy.timeoutMs ?? globalPolicy.timeoutMs ?? 0));
+
+  const retryOnRaw = nodeRetries.retryOn ?? globalRetries.retryOn ?? ['task_error', 'contract_violation', 'timeout'];
+  const retryOn = Array.isArray(retryOnRaw) ? retryOnRaw.map((x) => String(x)) : ['task_error', 'contract_violation', 'timeout'];
+
+  return { maxAttempts, backoffMs, backoffMultiplier, timeoutMs, retryOn };
+}
+
+async function withTimeout(promiseFactory, timeoutMs, label = 'task') {
+  if (!timeoutMs || timeoutMs <= 0) {
+    return promiseFactory();
+  }
+
+  let timer = null;
+  try {
+    return await Promise.race([
+      promiseFactory(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const e = new Error(`${label} timed out after ${timeoutMs}ms`);
+          e.code = 'timeout';
+          reject(e);
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function executeTaskAttempt({ node, runDir, packRoot, ctx, rules, ajv, schemaCache }) {
+  for (const out of node.outputs || []) {
+    await materializeOutput({
+      outputName: out,
+      node,
+      role: node.role,
+      runDir,
+      packRoot,
+      ctx,
+    });
+  }
+
+  const { violations } = await validateOutputsContracts(
+    node.outputs || [],
+    runDir,
+    packRoot,
+    rules,
+    ajv,
+    schemaCache
+  );
+
+  if (violations.length) {
+    const err = new Error('contract_validation_failed');
+    err.code = 'contract_violation';
+    err.violations = violations;
+    throw err;
+  }
+
+  return { ok: true };
+}
+
 async function run() {
   const args = parseArgs(process.argv.slice(2));
   const workflowPath = path.resolve(args.workflow);
@@ -381,36 +456,81 @@ async function run() {
     } else {
       h.type = 'task';
       h.outputs = node.outputs || [];
-      for (const out of node.outputs || []) {
-        await materializeOutput({
-          outputName: out,
-          node,
-          role: node.role,
-          runDir,
-          packRoot,
-          ctx,
-        });
+
+      const policy = resolveNodePolicy(wf, node);
+      h.policy = policy;
+      h.attempts = [];
+
+      let succeeded = false;
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= policy.maxAttempts; attempt++) {
+        const attemptRec = {
+          attempt,
+          startedAt: new Date().toISOString(),
+        };
+
+        try {
+          await withTimeout(
+            () => executeTaskAttempt({ node, runDir, packRoot, ctx, rules, ajv, schemaCache }),
+            policy.timeoutMs,
+            node.id
+          );
+
+          attemptRec.result = 'ok';
+          attemptRec.finishedAt = new Date().toISOString();
+          h.attempts.push(attemptRec);
+          succeeded = true;
+          break;
+        } catch (e) {
+          const code = String(e?.code || 'task_error');
+          attemptRec.result = 'error';
+          attemptRec.errorCode = code;
+          attemptRec.message = String(e?.message || e);
+          if (e?.violations) attemptRec.contractViolations = e.violations;
+          attemptRec.finishedAt = new Date().toISOString();
+          h.attempts.push(attemptRec);
+
+          lastError = e;
+          const retryable = policy.retryOn.includes(code) && attempt < policy.maxAttempts;
+          if (retryable) {
+            const backoff = Math.round(policy.backoffMs * Math.pow(policy.backoffMultiplier, attempt - 1));
+            await appendJsonl(path.join(runDir, 'execution_events.jsonl'), {
+              ts: new Date().toISOString(),
+              step: h.step,
+              nodeId: h.nodeId,
+              type: 'retry_wait',
+              attempt,
+              errorCode: code,
+              backoffMs: backoff,
+            });
+            await sleep(backoff);
+            continue;
+          }
+          break;
+        }
       }
 
-      const { violations } = await validateOutputsContracts(
-        node.outputs || [],
-        runDir,
-        packRoot,
-        rules,
-        ajv,
-        schemaCache
-      );
-
-      if (violations.length) {
-        h.result = 'ok_with_contract_violations';
-        h.contractViolations = violations;
-        ctx.contractViolations.push(...violations.map((v) => ({ nodeId: node.id, ...v })));
-        ctx.forcedDeviation = ctx.forcedDeviation || 'implementation_bug';
-      } else {
+      if (succeeded) {
         h.result = 'ok';
+        h.next = node.next || 'end';
+      } else {
+        const code = String(lastError?.code || 'task_error');
+        if (code === 'contract_violation') {
+          const violations = lastError?.violations || [];
+          h.result = 'ok_with_contract_violations';
+          h.contractViolations = violations;
+          ctx.contractViolations.push(...violations.map((v) => ({ nodeId: node.id, ...v })));
+          ctx.forcedDeviation = ctx.forcedDeviation || 'implementation_bug';
+          h.next = node.next || 'end';
+        } else {
+          h.result = 'task_failed';
+          h.errorCode = code;
+          h.errorMessage = String(lastError?.message || lastError);
+          h.next = node.onError || 'end';
+        }
       }
 
-      h.next = node.next || 'end';
       current = h.next;
     }
 

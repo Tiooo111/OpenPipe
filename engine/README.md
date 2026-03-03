@@ -2,11 +2,12 @@
 
 This folder contains the execution layer for workflow packs.
 
-New in v0.2:
+New in v0.3:
 - Contract validation from `contracts/contract-rules.yaml`
 - Execution state checkpoints (`execution_state.json`)
 - Resume support (`--resume-run-dir`)
 - Event stream log (`execution_events.jsonl`)
+- Node retry/timeout/backoff policy support (workflow-defined)
 
 ## 1) CLI
 
@@ -45,6 +46,31 @@ Optional flags:
 - `--max-steps <n>`
 - `--resume-run-dir <path>` (resume from saved `execution_state.json`)
 - `--inject-deviation <requirements_mismatch|architecture_mismatch|implementation_bug|verification_gap>`
+
+### Runtime policy in `workflow.yaml`
+
+You can configure global and per-node retry/timeout behavior:
+
+```yaml
+runtime:
+  policy:
+    timeoutMs: 12000
+    retries:
+      maxAttempts: 2
+      backoffMs: 200
+      backoffMultiplier: 2
+      retryOn: [task_error, timeout, contract_violation]
+
+nodes:
+  - id: implement_tasks
+    policy:
+      timeoutMs: 20000
+      retries:
+        maxAttempts: 3
+        backoffMs: 300
+        backoffMultiplier: 2
+        retryOn: [task_error, timeout, contract_violation]
+```
 
 ## 2) REST API
 
