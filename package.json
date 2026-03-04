@@ -8,6 +8,7 @@
   "scripts": {
     "wf:list": "node engine/wf-cli.js list",
     "wf:validate": "node engine/wf-cli.js validate",
+    "wf:doctor": "node engine/wf-cli.js doctor",
     "wf:scaffold": "node engine/wf-cli.js scaffold",
     "wf:runs": "node engine/wf-cli.js runs",
     "wf:run": "node engine/wf-cli.js run",

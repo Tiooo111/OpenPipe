@@ -21,7 +21,9 @@ npm run wf:list
 npm run wf:list -- --details
 node engine/wf-cli.js describe metapipe
 npm run wf:validate -- metapipe
+npm run wf:doctor -- metapipe
 npm run wf:runs -- --summary-only
+npm run wf:runs -- --trends --limit 200
 ```
 
 Run a pipe:
@@ -55,8 +57,9 @@ Optional flags:
 - `--inject-deviation <requirements_mismatch|architecture_mismatch|implementation_bug|verification_gap>`
 - `--input key=value` (repeatable)
 - `--inputs-json '{"task_prompt":"..."}'`
+- `wf doctor <pipeId> [--limit 50]`
 - `wf scaffold <pipeId> [--base-dir pipes]`
-- `wf runs [--limit 20] [--summary-only]`
+- `wf runs [--limit 20] [--summary-only|--trends]`
 
 ### Executor plugin routing
 
@@ -156,7 +159,9 @@ curl http://127.0.0.1:8787/workflows
 curl "http://127.0.0.1:8787/workflows?details=true"
 curl http://127.0.0.1:8787/workflows/metapipe
 curl http://127.0.0.1:8787/workflows/metapipe/validate
+curl http://127.0.0.1:8787/workflows/metapipe/doctor?limit=100
 curl http://127.0.0.1:8787/runs/summary
+curl http://127.0.0.1:8787/runs/trends?limit=200
 ```
 
 OpenAPI spec:
@@ -194,9 +199,11 @@ Methods (JSON line protocol):
 - `list_workflows` (optional params: `{ details: true }`)
 - `describe_workflow` with params `{ packId }`
 - `validate_workflow` with params `{ packId }`
+- `doctor_workflow` with params `{ packId, limit? }`
 - `scaffold_workflow` with params `{ packId, baseDir? }`
 - `list_runs` with params `{ limit? }`
 - `summarize_runs` with params `{ limit? }`
+- `run_trends` with params `{ limit? }`
 - `run_workflow` with params `{ packId, dryRun, runDir, resumeRunDir, maxSteps, injectDeviation, inputs }`
 
 Example request line:
@@ -218,9 +225,11 @@ Exposed MCP tools:
 - `list_workflows`
 - `describe_workflow`
 - `validate_workflow`
+- `doctor_workflow`
 - `scaffold_workflow`
 - `list_runs`
 - `summarize_runs`
+- `run_trends`
 - `run_workflow`
 
 This lets external MCP clients call OpenPipe pipes directly without going through REST.

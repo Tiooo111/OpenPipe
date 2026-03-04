@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import {
   describePack,
+  doctorPack,
   listPackDetails,
   listPacks,
   listRuns,
   runPack,
+  runTrends,
   scaffoldPipe,
   summarizeRuns,
   validatePack,
@@ -48,10 +50,11 @@ function parseArgs(argv) {
     limit: 20,
     summaryOnly: false,
     baseDir: 'pipes',
+    trends: false,
   };
 
   let start = 1;
-  if ((out.cmd === 'run' || out.cmd === 'describe' || out.cmd === 'validate' || out.cmd === 'scaffold') && argv[1] && !String(argv[1]).startsWith('--')) {
+  if ((out.cmd === 'run' || out.cmd === 'describe' || out.cmd === 'validate' || out.cmd === 'scaffold' || out.cmd === 'doctor') && argv[1] && !String(argv[1]).startsWith('--')) {
     out.packId = argv[1];
     start = 2;
   }
@@ -66,6 +69,7 @@ function parseArgs(argv) {
     else if (a === '--details') out.details = true;
     else if (a === '--limit') out.limit = Number(argv[++i]);
     else if (a === '--summary-only') out.summaryOnly = true;
+    else if (a === '--trends') out.trends = true;
     else if (a === '--base-dir') out.baseDir = argv[++i] || 'pipes';
     else if (a === '--input') {
       const { key, value } = parseInputKV(argv[++i] || '');
@@ -90,7 +94,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.cmd === 'help' || args.cmd === '--help' || args.cmd === '-h') {
-    console.log(`Usage:\n  wf list [--details]\n  wf describe <pipeId>\n  wf validate <pipeId>\n  wf scaffold <pipeId> [--base-dir pipes]\n  wf runs [--limit 20] [--summary-only]\n  wf run <pipeId> [--dry-run] [--run-dir <dir>] [--resume-run-dir <dir>] [--max-steps <n>] [--inject-deviation <type>] [--input key=value] [--inputs-json '{"task_prompt":"..."}']`);
+    console.log(`Usage:\n  wf list [--details]\n  wf describe <pipeId>\n  wf validate <pipeId>\n  wf doctor <pipeId> [--limit 50]\n  wf scaffold <pipeId> [--base-dir pipes]\n  wf runs [--limit 20] [--summary-only|--trends]\n  wf run <pipeId> [--dry-run] [--run-dir <dir>] [--resume-run-dir <dir>] [--max-steps <n>] [--inject-deviation <type>] [--input key=value] [--inputs-json '{"task_prompt":"..."}']`);
     return;
   }
 
@@ -121,6 +125,13 @@ async function main() {
     return;
   }
 
+  if (args.cmd === 'doctor') {
+    if (!args.packId) throw new Error('Missing pipeId. Usage: doctor <pipeId>');
+    const res = await doctorPack(args.packId, { limit: args.limit });
+    console.log(JSON.stringify({ ok: res.ok, diagnosis: res }, null, 2));
+    return;
+  }
+
   if (args.cmd === 'scaffold') {
     if (!args.packId) throw new Error('Missing pipeId. Usage: scaffold <pipeId>');
     const res = await scaffoldPipe(args.packId, { baseDir: args.baseDir });
@@ -131,6 +142,12 @@ async function main() {
   if (args.cmd === 'runs') {
     if (args.summaryOnly) {
       const res = await summarizeRuns({ limit: args.limit });
+      console.log(JSON.stringify({ ok: true, ...res }, null, 2));
+      return;
+    }
+
+    if (args.trends) {
+      const res = await runTrends({ limit: args.limit });
       console.log(JSON.stringify({ ok: true, ...res }, null, 2));
       return;
     }

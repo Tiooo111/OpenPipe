@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: OpenPipe Workflow API
-  version: 0.5.0
-  description: API for discovering, validating, scaffolding, and running OpenPipe workflows/pipes.
+  version: 0.6.0
+  description: API for discovering, validating, diagnosing, scaffolding, and running OpenPipe workflows/pipes.
 servers:
   - url: http://127.0.0.1:8787
 paths:
@@ -38,6 +38,19 @@ paths:
       responses:
         '200':
           description: Run summary
+
+  /runs/trends:
+    get:
+      summary: Run trends grouped by UTC day
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Run trends
 
   /workflows/scaffold:
     post:
@@ -104,6 +117,24 @@ paths:
         '422':
           description: Workflow validation failed
 
+  /workflows/{packId}/doctor:
+    get:
+      summary: Diagnose workflow quality from validation and recent runs
+      parameters:
+        - in: path
+          name: packId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Workflow diagnosis
+
   /workflows/{packId}/run:
     post:
       summary: Run a workflow
@@ -167,6 +198,24 @@ paths:
           description: Pipe valid
         '422':
           description: Pipe invalid
+
+  /pipes/{pipeId}/doctor:
+    get:
+      summary: Alias of /workflows/{packId}/doctor
+      parameters:
+        - in: path
+          name: pipeId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Pipe diagnosis
 
   /pipes/{pipeId}/run:
     post:

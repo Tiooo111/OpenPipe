@@ -662,3 +662,129 @@ export async function summarizeRuns(opts = {}) {
 
   return { summary, runs };
 }
+
+function utcDayFromMs(ms) {
+  const d = new Date(ms);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export async function runTrends(opts = {}) {
+  const runs = await listRuns(opts);
+  const byDay = {};
+
+  for (const r of runs) {
+    const day = utcDayFromMs(r.mtimeMs);
+    if (!byDay[day]) {
+      byDay[day] = {
+        total: 0,
+        terminatedBy: {},
+        byWorkflow: {},
+        withContractViolations: 0,
+      };
+    }
+
+    const bucket = byDay[day];
+    bucket.total += 1;
+
+    const t = r.terminatedBy || 'unknown';
+    bucket.terminatedBy[t] = (bucket.terminatedBy[t] || 0) + 1;
+
+    const wf = r.workflowId || 'unknown';
+    bucket.byWorkflow[wf] = (bucket.byWorkflow[wf] || 0) + 1;
+
+    if ((r.contractViolations || 0) > 0) bucket.withContractViolations += 1;
+  }
+
+  const days = Object.keys(byDay).sort();
+  return { days, byDay, runs };
+}
+
+function recommendationFromIssue(issue) {
+  switch (issue?.code) {
+    case 'role_not_defined':
+      return `Add missing role '${issue.role}' to roles.yaml or change node role in workflow.yaml.`;
+    case 'transition_target_not_found':
+      return `Fix transition target '${issue.target}' in ${issue.field}.`;
+    case 'contract_schema_not_found':
+      return `Create schema file '${issue.schema}' or update contract-rules.yaml path.`;
+    case 'template_missing':
+      return `Add markdown template for '${issue.output}' under templates/.`;
+    case 'input_duplicate':
+      return `Remove duplicate input definition '${issue.field}' in workflow.yaml.`;
+    case 'input_type_unknown':
+      return `Use one of supported input types: string|number|boolean|object|array.`;
+    default:
+      return issue?.message || 'Review workflow/contracts and re-run validation.';
+  }
+}
+
+export async function doctorPack(packId, opts = {}) {
+  const validation = await validatePack(packId);
+  const limit = Math.max(1, Number(opts.limit || 50));
+
+  const runs = await listRuns({ limit });
+  const packRuns = runs.filter((r) => r.workflowId === packId);
+
+  const runStats = {
+    total: packRuns.length,
+    terminatedBy: {},
+    withContractViolations: 0,
+    missingReports: 0,
+  };
+
+  for (const r of packRuns) {
+    const t = r.terminatedBy || 'unknown';
+    runStats.terminatedBy[t] = (runStats.terminatedBy[t] || 0) + 1;
+    if ((r.contractViolations || 0) > 0) runStats.withContractViolations += 1;
+    if (!r.hasReport) runStats.missingReports += 1;
+  }
+
+  const recommendations = [];
+  for (const e of validation.errors || []) {
+    recommendations.push({ severity: 'high', code: e.code, recommendation: recommendationFromIssue(e) });
+  }
+  for (const w of validation.warnings || []) {
+    recommendations.push({ severity: 'medium', code: w.code, recommendation: recommendationFromIssue(w) });
+  }
+
+  if (runStats.missingReports > 0) {
+    recommendations.push({
+      severity: 'medium',
+      code: 'runs_missing_reports',
+      recommendation: 'Investigate incomplete run directories; check runner crashes or interrupted executions.',
+    });
+  }
+
+  const failures = Object.entries(runStats.terminatedBy)
+    .filter(([k]) => !['end', 'unknown'].includes(k))
+    .reduce((sum, [, v]) => sum + Number(v || 0), 0);
+
+  if (failures > 0) {
+    recommendations.push({
+      severity: 'medium',
+      code: 'non_end_terminations_detected',
+      recommendation: 'Inspect execution_report.json in failed runs and tighten node policies/timeouts.',
+    });
+  }
+
+  let healthScore = 100;
+  healthScore -= (validation.errors || []).length * 25;
+  healthScore -= (validation.warnings || []).length * 8;
+  healthScore -= runStats.missingReports * 5;
+  healthScore -= runStats.withContractViolations * 10;
+  healthScore -= failures * 10;
+  healthScore = Math.max(0, Math.min(100, healthScore));
+
+  return {
+    ok: validation.ok,
+    packId,
+    healthScore,
+    validation,
+    runStats,
+    recommendations,
+    inspectedRuns: limit,
+  };
+}

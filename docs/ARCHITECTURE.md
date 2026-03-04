@@ -58,7 +58,7 @@ Deviations are classified and routed back to designated stages/roles:
 
 ## Invocation Surfaces
 
-- CLI (`wf list|describe|validate|scaffold|runs|run`)
-- REST (`/workflows`, `/workflows/scaffold`, `/workflows/:packId`, `/workflows/:packId/validate`, `/workflows/:packId/run`, `/runs`, `/runs/summary`)
-- StdIO RPC (`list_workflows`, `describe_workflow`, `validate_workflow`, `scaffold_workflow`, `list_runs`, `summarize_runs`, `run_workflow`)
-- MCP tools (`list_workflows`, `describe_workflow`, `validate_workflow`, `scaffold_workflow`, `list_runs`, `summarize_runs`, `run_workflow`)
+- CLI (`wf list|describe|validate|doctor|scaffold|runs|run`)
+- REST (`/workflows`, `/workflows/scaffold`, `/workflows/:packId`, `/workflows/:packId/validate`, `/workflows/:packId/doctor`, `/workflows/:packId/run`, `/runs`, `/runs/summary`, `/runs/trends`)
+- StdIO RPC (`list_workflows`, `describe_workflow`, `validate_workflow`, `doctor_workflow`, `scaffold_workflow`, `list_runs`, `summarize_runs`, `run_trends`, `run_workflow`)
+- MCP tools (`list_workflows`, `describe_workflow`, `validate_workflow`, `doctor_workflow`, `scaffold_workflow`, `list_runs`, `summarize_runs`, `run_trends`, `run_workflow`)

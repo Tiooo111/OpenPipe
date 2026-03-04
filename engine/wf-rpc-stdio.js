@@ -2,10 +2,12 @@
 import readline from 'node:readline';
 import {
   describePack,
+  doctorPack,
   listPackDetails,
   listPacks,
   listRuns,
   runPack,
+  runTrends,
   scaffoldPipe,
   summarizeRuns,
   validatePack,
@@ -72,6 +74,21 @@ async function handleLine(line) {
       const limit = Number(params.limit || 50);
       const result = await summarizeRuns({ limit });
       return respond({ id, result });
+    }
+
+    if (req.method === 'run_trends') {
+      const params = req.params || {};
+      const limit = Number(params.limit || 200);
+      const result = await runTrends({ limit });
+      return respond({ id, result });
+    }
+
+    if (req.method === 'doctor_workflow') {
+      const params = req.params || {};
+      const packId = params.packId;
+      const limit = Number(params.limit || 50);
+      const diagnosis = await doctorPack(packId, { limit });
+      return respond({ id, result: { ok: diagnosis.ok, diagnosis } });
     }
 
     if (req.method === 'run_workflow') {

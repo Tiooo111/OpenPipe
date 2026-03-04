@@ -5,10 +5,12 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import {
   describePack,
+  doctorPack,
   listPackDetails,
   listPacks,
   listRuns,
   runPack,
+  runTrends,
   scaffoldPipe,
   summarizeRuns,
   validatePack,
@@ -92,6 +94,12 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, ...out });
     }
 
+    if (req.method === 'GET' && u.pathname === '/runs/trends') {
+      const limit = Number(u.searchParams.get('limit') || 200);
+      const out = await runTrends({ limit });
+      return json(res, 200, { ok: true, ...out });
+    }
+
     if (req.method === 'POST' && u.pathname === '/workflows/scaffold') {
       const body = await readJsonBody(req);
       const packId = body?.packId;
@@ -126,6 +134,16 @@ const server = http.createServer(async (req, res) => {
         const packId = m[1];
         const validation = await validatePack(packId);
         return json(res, validation.ok ? 200 : 422, { ok: validation.ok, packId, validation });
+      }
+    }
+
+    if (req.method === 'GET' && (u.pathname.startsWith('/workflows/') || u.pathname.startsWith('/pipes/'))) {
+      const m = u.pathname.match(/^\/(?:workflows|pipes)\/([^/]+)\/doctor$/);
+      if (m) {
+        const packId = m[1];
+        const limit = Number(u.searchParams.get('limit') || 50);
+        const diagnosis = await doctorPack(packId, { limit });
+        return json(res, 200, { ok: diagnosis.ok, packId, diagnosis });
       }
     }
 

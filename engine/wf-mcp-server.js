@@ -4,10 +4,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   describePack,
+  doctorPack,
   listPackDetails,
   listPacks,
   listRuns,
   runPack,
+  runTrends,
   scaffoldPipe,
   summarizeRuns,
   validatePack,
@@ -15,7 +17,7 @@ import {
 
 const server = new McpServer({
   name: 'openpipe-workflow-engine',
-  version: '0.2.0',
+  version: '0.3.0',
 });
 
 server.tool(
@@ -127,6 +129,45 @@ server.tool(
         {
           type: 'text',
           text: JSON.stringify({ ok: true, ...result }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'run_trends',
+  'Show run trends grouped by UTC day',
+  {
+    limit: z.number().int().positive().optional(),
+  },
+  async (args) => {
+    const result = await runTrends({ limit: args.limit || 200 });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: true, ...result }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'doctor_workflow',
+  'Diagnose workflow quality using validation + recent run health',
+  {
+    packId: z.string().min(1),
+    limit: z.number().int().positive().optional(),
+  },
+  async (args) => {
+    const diagnosis = await doctorPack(args.packId, { limit: args.limit || 50 });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: diagnosis.ok, packId: args.packId, diagnosis }, null, 2),
         },
       ],
     };
