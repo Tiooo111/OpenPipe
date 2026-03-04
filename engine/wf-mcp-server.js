@@ -2,7 +2,16 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { describePack, listPackDetails, listPacks, runPack, validatePack } from './wf-core.js';
+import {
+  describePack,
+  listPackDetails,
+  listPacks,
+  listRuns,
+  runPack,
+  scaffoldPipe,
+  summarizeRuns,
+  validatePack,
+} from './wf-core.js';
 
 const server = new McpServer({
   name: 'openpipe-workflow-engine',
@@ -60,6 +69,64 @@ server.tool(
         {
           type: 'text',
           text: JSON.stringify({ ok: validation.ok, packId: args.packId, validation }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'scaffold_workflow',
+  'Scaffold a new workflow pipe under pipes/',
+  {
+    packId: z.string().min(1),
+    baseDir: z.string().optional(),
+  },
+  async (args) => {
+    const result = await scaffoldPipe(args.packId, { baseDir: args.baseDir || 'pipes' });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: result.ok, packId: args.packId, result }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'list_runs',
+  'List recent workflow run reports',
+  {
+    limit: z.number().int().positive().optional(),
+  },
+  async (args) => {
+    const runs = await listRuns({ limit: args.limit || 20 });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: true, runs }, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+server.tool(
+  'summarize_runs',
+  'Summarize recent runs by workflow and termination reason',
+  {
+    limit: z.number().int().positive().optional(),
+  },
+  async (args) => {
+    const result = await summarizeRuns({ limit: args.limit || 50 });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({ ok: true, ...result }, null, 2),
         },
       ],
     };

@@ -375,3 +375,290 @@ export async function runPack(packId, opts = {}) {
     throw e;
   }
 }
+
+async function ensureDir(dir) {
+  await fs.mkdir(dir, { recursive: true });
+}
+
+async function writeIfAbsent(file, content) {
+  if (await fileExists(file)) return false;
+  await ensureDir(path.dirname(file));
+  await fs.writeFile(file, content, 'utf-8');
+  return true;
+}
+
+function scaffoldWorkflowYaml(packId) {
+  return `version: "0.1"
+id: ${packId}
+name: ${packId}
+mode: state-machine
+entryNode: collect_requirements
+
+inputs:
+  - name: task_prompt
+    type: string
+    required: true
+
+nodes:
+  - id: collect_requirements
+    role: analyst
+    outputs:
+      - requirements.md
+      - acceptance_criteria.md
+    next: design_flow
+
+  - id: design_flow
+    role: architect
+    outputs:
+      - workflow.yaml
+      - roles.yaml
+      - tasks.yaml
+    next: verify_outputs
+
+  - id: verify_outputs
+    role: verifier
+    outputs:
+      - verification_report.md
+      - deviation_report.md
+    next: route_deviation
+
+  - id: route_deviation
+    role: orchestrator
+    router:
+      matrix: templates/deviation-routing-matrix.md
+      onNoDeviation: finalize
+      onDeviation:
+        requirements_mismatch: collect_requirements
+        architecture_mismatch: design_flow
+        implementation_bug: design_flow
+        verification_gap: verify_outputs
+
+  - id: finalize
+    role: orchestrator
+    outputs:
+      - pack_manifest.json
+      - handoff.md
+    next: end
+`;
+}
+
+function scaffoldRolesYaml() {
+  return `version: "0.1"
+roles:
+  orchestrator:
+    objective: "Coordinate routing/finalization"
+    executor:
+      type: template
+
+  analyst:
+    objective: "Turn task prompt into crisp requirements"
+    executor:
+      type: template
+
+  architect:
+    objective: "Create executable workflow/task structure"
+    executor:
+      type: template
+
+  verifier:
+    objective: "Validate generated artifacts and classify deviation"
+    executor:
+      type: template
+`;
+}
+
+function scaffoldTasksYaml() {
+  return `version: "0.1"
+backlog:
+  - id: task-1
+    title: "Clarify problem and success criteria"
+    ownerRole: analyst
+  - id: task-2
+    title: "Design flow and role boundaries"
+    ownerRole: architect
+  - id: task-3
+    title: "Verify outputs and route deviations"
+    ownerRole: verifier
+`;
+}
+
+function scaffoldContractRules() {
+  return `version: "0.1"
+rules:
+  - file: requirements.md
+    type: markdown_headers
+    requiredHeaders:
+      - "# requirements.md"
+      - "## Problem Statement"
+
+  - file: acceptance_criteria.md
+    type: markdown_headers
+    requiredHeaders:
+      - "# acceptance_criteria.md"
+      - "## Functional Criteria"
+
+  - file: workflow.yaml
+    type: yaml_keys
+    requiredKeys: ["id", "entryNode", "nodes"]
+
+  - file: roles.yaml
+    type: yaml_keys
+    requiredKeys: ["roles"]
+
+  - file: tasks.yaml
+    type: yaml_keys
+    requiredKeys: ["backlog"]
+
+  - file: pack_manifest.json
+    type: json_schema
+    schema: contracts/pack_manifest.schema.json
+`;
+}
+
+function scaffoldManifestSchema() {
+  return `${JSON.stringify({
+    $schema: 'http://json-schema.org/draft-07/schema#',
+    title: 'PackManifest',
+    type: 'object',
+    required: ['packId', 'version', 'artifacts'],
+    properties: {
+      packId: { type: 'string' },
+      version: { type: 'string' },
+      artifacts: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    },
+  }, null, 2)}\n`;
+}
+
+export async function scaffoldPipe(packId, opts = {}) {
+  if (!isSafePackId(packId)) {
+    throw new Error(`invalid_pack_id:${packId}`);
+  }
+
+  const baseDir = path.resolve(opts.baseDir || 'pipes');
+  const pipeDir = path.join(baseDir, packId);
+
+  if (await fileExists(path.join(pipeDir, 'workflow.yaml'))) {
+    throw new Error(`pipe_already_exists:${packId}`);
+  }
+
+  await ensureDir(pipeDir);
+  await ensureDir(path.join(pipeDir, 'contracts'));
+  await ensureDir(path.join(pipeDir, 'templates'));
+  await ensureDir(path.join(pipeDir, 'scripts'));
+  await ensureDir(path.join(pipeDir, 'examples'));
+
+  await writeIfAbsent(path.join(pipeDir, 'README.md'), `# ${packId}\n\nScaffolded by OpenPipe.\n\n## Run\n\n\`\`\`bash\nnpm run wf:validate -- ${packId}\nnpm run wf:run -- ${packId} --input task_prompt=\"Describe your task\"\n\`\`\`\n`);
+  await writeIfAbsent(path.join(pipeDir, 'runbook.md'), '# Runbook\n\n- Validate first\n- Run with explicit task_prompt\n');
+  await writeIfAbsent(path.join(pipeDir, 'workflow.yaml'), scaffoldWorkflowYaml(packId));
+  await writeIfAbsent(path.join(pipeDir, 'roles.yaml'), scaffoldRolesYaml());
+  await writeIfAbsent(path.join(pipeDir, 'tasks.yaml'), scaffoldTasksYaml());
+
+  await writeIfAbsent(path.join(pipeDir, 'contracts', 'contract-rules.yaml'), scaffoldContractRules());
+  await writeIfAbsent(path.join(pipeDir, 'contracts', 'pack_manifest.schema.json'), scaffoldManifestSchema());
+
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'requirements.md'), '# requirements.md\n\n## Problem Statement\n{{taskPrompt}}\n');
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'acceptance_criteria.md'), '# acceptance_criteria.md\n\n## Functional Criteria\n- [ ] Criterion F1 (measurable)\n');
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'verification_report.md'), '# verification_report.md\n\nstatus: pass\n');
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'deviation_report.md'), '# deviation_report.md\n\nStatus: no_deviation\n');
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'handoff.md'), '# handoff.md\n\nGenerated by scaffold.\n');
+  await writeIfAbsent(path.join(pipeDir, 'templates', 'deviation-routing-matrix.md'), '# deviation-routing-matrix.md\n');
+
+  let validation = null;
+  if (WORKFLOW_DIRS.includes(String(opts.baseDir || 'pipes'))) {
+    validation = await validatePack(packId);
+  } else {
+    validation = {
+      ok: true,
+      packId,
+      workflowPath: path.join(pipeDir, 'workflow.yaml'),
+      errors: [],
+      warnings: [
+        {
+          code: 'validation_skipped_nonstandard_base_dir',
+          message: `baseDir '${opts.baseDir}' is outside default discovery dirs (${WORKFLOW_DIRS.join(',')})`,
+        },
+      ],
+      summary: null,
+    };
+  }
+
+  return {
+    ok: validation.ok,
+    packId,
+    pipeDir,
+    validation,
+  };
+}
+
+export async function listRuns(opts = {}) {
+  const runsDir = path.resolve(opts.runsDir || '.runs');
+  const limit = Math.max(1, Number(opts.limit || 20));
+
+  if (!(await fileExists(runsDir))) return [];
+
+  const entries = await fs.readdir(runsDir, { withFileTypes: true });
+  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+
+  const runs = [];
+  for (const name of dirs) {
+    const runDir = path.join(runsDir, name);
+    const reportPath = path.join(runDir, 'execution_report.json');
+    const statePath = path.join(runDir, 'execution_state.json');
+
+    let stat = null;
+    try {
+      stat = await fs.stat(runDir);
+    } catch {
+      continue;
+    }
+
+    let report = null;
+    if (await fileExists(reportPath)) {
+      try {
+        report = JSON.parse(await readText(reportPath));
+      } catch {
+        report = null;
+      }
+    }
+
+    runs.push({
+      runId: name,
+      runDir,
+      mtimeMs: stat.mtimeMs,
+      workflowId: report?.workflowId || null,
+      steps: report?.steps ?? null,
+      terminatedBy: report?.terminatedBy || null,
+      contractViolations: Array.isArray(report?.contractViolations) ? report.contractViolations.length : null,
+      hasReport: !!report,
+      hasState: await fileExists(statePath),
+    });
+  }
+
+  runs.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return runs.slice(0, limit);
+}
+
+export async function summarizeRuns(opts = {}) {
+  const runs = await listRuns(opts);
+  const summary = {
+    total: runs.length,
+    terminatedBy: {},
+    byWorkflow: {},
+    withContractViolations: 0,
+  };
+
+  for (const r of runs) {
+    const t = r.terminatedBy || 'unknown';
+    summary.terminatedBy[t] = (summary.terminatedBy[t] || 0) + 1;
+
+    const wf = r.workflowId || 'unknown';
+    summary.byWorkflow[wf] = (summary.byWorkflow[wf] || 0) + 1;
+
+    if ((r.contractViolations || 0) > 0) summary.withContractViolations += 1;
+  }
+
+  return { summary, runs };
+}

@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: OpenPipe Workflow API
-  version: 0.4.0
-  description: API for discovering, validating, and running OpenPipe workflows/pipes.
+  version: 0.5.0
+  description: API for discovering, validating, scaffolding, and running OpenPipe workflows/pipes.
 servers:
   - url: http://127.0.0.1:8787
 paths:
@@ -12,6 +12,53 @@ paths:
       responses:
         '200':
           description: OK
+
+  /runs:
+    get:
+      summary: List recent run reports
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Recent runs
+
+  /runs/summary:
+    get:
+      summary: Summarize recent run outcomes
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Run summary
+
+  /workflows/scaffold:
+    post:
+      summary: Scaffold a new workflow pipe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [packId]
+              properties:
+                packId:
+                  type: string
+                baseDir:
+                  type: string
+      responses:
+        '200':
+          description: Scaffold completed
+        '409':
+          description: Pipe already exists
 
   /workflows:
     get:

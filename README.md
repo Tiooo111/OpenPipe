@@ -58,6 +58,7 @@ npm run wf:list
 npm run wf:list -- --details
 node engine/wf-cli.js describe metapipe
 npm run wf:validate -- metapipe
+npm run wf:runs -- --summary-only
 ```
 
 Run MetaPipe:
@@ -68,11 +69,22 @@ npm run wf:run -- metapipe --dry-run
 npm run wf:run -- metapipe --input task_prompt="Design a customer support triage workflow"
 ```
 
+Scaffold a new pipe starter:
+
+```bash
+npm run wf:scaffold -- procurement-flow
+npm run wf:validate -- procurement-flow
+```
+
 REST call:
 
 ```bash
 npm run wf:api
 curl http://127.0.0.1:8787/workflows/metapipe/validate
+curl http://127.0.0.1:8787/runs/summary
+curl -X POST http://127.0.0.1:8787/workflows/scaffold \
+  -H 'content-type: application/json' \
+  -d '{"packId":"procurement-flow"}'
 curl -X POST http://127.0.0.1:8787/workflows/metapipe/run \
   -H 'content-type: application/json' \
   -d '{"inputs":{"task_prompt":"Design a customer support triage workflow"}}'

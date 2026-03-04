@@ -1,5 +1,14 @@
 #!/usr/bin/env node
-import { describePack, listPackDetails, listPacks, runPack, validatePack } from './wf-core.js';
+import {
+  describePack,
+  listPackDetails,
+  listPacks,
+  listRuns,
+  runPack,
+  scaffoldPipe,
+  summarizeRuns,
+  validatePack,
+} from './wf-core.js';
 
 function parseMaybeJson(value) {
   if (value == null) return value;
@@ -36,10 +45,13 @@ function parseArgs(argv) {
     details: false,
     inputs: {},
     inputsJson: null,
+    limit: 20,
+    summaryOnly: false,
+    baseDir: 'pipes',
   };
 
   let start = 1;
-  if ((out.cmd === 'run' || out.cmd === 'describe' || out.cmd === 'validate') && argv[1] && !String(argv[1]).startsWith('--')) {
+  if ((out.cmd === 'run' || out.cmd === 'describe' || out.cmd === 'validate' || out.cmd === 'scaffold') && argv[1] && !String(argv[1]).startsWith('--')) {
     out.packId = argv[1];
     start = 2;
   }
@@ -52,6 +64,9 @@ function parseArgs(argv) {
     else if (a === '--dry-run') out.dryRun = true;
     else if (a === '--inject-deviation') out.injectDeviation = argv[++i];
     else if (a === '--details') out.details = true;
+    else if (a === '--limit') out.limit = Number(argv[++i]);
+    else if (a === '--summary-only') out.summaryOnly = true;
+    else if (a === '--base-dir') out.baseDir = argv[++i] || 'pipes';
     else if (a === '--input') {
       const { key, value } = parseInputKV(argv[++i] || '');
       if (key) out.inputs[key] = value;
@@ -75,7 +90,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
 
   if (args.cmd === 'help' || args.cmd === '--help' || args.cmd === '-h') {
-    console.log(`Usage:\n  wf list [--details]\n  wf describe <pipeId>\n  wf validate <pipeId>\n  wf run <pipeId> [--dry-run] [--run-dir <dir>] [--resume-run-dir <dir>] [--max-steps <n>] [--inject-deviation <type>] [--input key=value] [--inputs-json '{"task_prompt":"..."}']`);
+    console.log(`Usage:\n  wf list [--details]\n  wf describe <pipeId>\n  wf validate <pipeId>\n  wf scaffold <pipeId> [--base-dir pipes]\n  wf runs [--limit 20] [--summary-only]\n  wf run <pipeId> [--dry-run] [--run-dir <dir>] [--resume-run-dir <dir>] [--max-steps <n>] [--inject-deviation <type>] [--input key=value] [--inputs-json '{"task_prompt":"..."}']`);
     return;
   }
 
@@ -103,6 +118,25 @@ async function main() {
     const res = await validatePack(args.packId);
     console.log(JSON.stringify({ ok: res.ok, validation: res }, null, 2));
     if (!res.ok) process.exitCode = 2;
+    return;
+  }
+
+  if (args.cmd === 'scaffold') {
+    if (!args.packId) throw new Error('Missing pipeId. Usage: scaffold <pipeId>');
+    const res = await scaffoldPipe(args.packId, { baseDir: args.baseDir });
+    console.log(JSON.stringify(res, null, 2));
+    return;
+  }
+
+  if (args.cmd === 'runs') {
+    if (args.summaryOnly) {
+      const res = await summarizeRuns({ limit: args.limit });
+      console.log(JSON.stringify({ ok: true, ...res }, null, 2));
+      return;
+    }
+
+    const runs = await listRuns({ limit: args.limit });
+    console.log(JSON.stringify({ ok: true, runs }, null, 2));
     return;
   }
 

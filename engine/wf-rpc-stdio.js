@@ -1,14 +1,24 @@
 #!/usr/bin/env node
 import readline from 'node:readline';
-import { describePack, listPackDetails, listPacks, runPack, validatePack } from './wf-core.js';
+import {
+  describePack,
+  listPackDetails,
+  listPacks,
+  listRuns,
+  runPack,
+  scaffoldPipe,
+  summarizeRuns,
+  validatePack,
+} from './wf-core.js';
 
 function respond(msg) {
   process.stdout.write(`${JSON.stringify(msg)}\n`);
 }
 
 const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+let queue = Promise.resolve();
 
-rl.on('line', async (line) => {
+async function handleLine(line) {
   let req;
   try {
     req = JSON.parse(line);
@@ -42,6 +52,28 @@ rl.on('line', async (line) => {
       return respond({ id, result: { ok: validation.ok, validation } });
     }
 
+    if (req.method === 'scaffold_workflow') {
+      const params = req.params || {};
+      const packId = params.packId;
+      const baseDir = params.baseDir || 'pipes';
+      const result = await scaffoldPipe(packId, { baseDir });
+      return respond({ id, result });
+    }
+
+    if (req.method === 'list_runs') {
+      const params = req.params || {};
+      const limit = Number(params.limit || 20);
+      const runs = await listRuns({ limit });
+      return respond({ id, result: { runs } });
+    }
+
+    if (req.method === 'summarize_runs') {
+      const params = req.params || {};
+      const limit = Number(params.limit || 50);
+      const result = await summarizeRuns({ limit });
+      return respond({ id, result });
+    }
+
     if (req.method === 'run_workflow') {
       const params = req.params || {};
       const packId = params.packId;
@@ -53,4 +85,10 @@ rl.on('line', async (line) => {
   } catch (e) {
     return respond({ id, error: String(e?.message || e) });
   }
+}
+
+rl.on('line', (line) => {
+  queue = queue.then(() => handleLine(line)).catch((e) => {
+    respond({ id: null, error: String(e?.message || e) });
+  });
 });

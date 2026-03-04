@@ -3,7 +3,16 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { describePack, listPackDetails, listPacks, runPack, validatePack } from './wf-core.js';
+import {
+  describePack,
+  listPackDetails,
+  listPacks,
+  listRuns,
+  runPack,
+  scaffoldPipe,
+  summarizeRuns,
+  validatePack,
+} from './wf-core.js';
 
 const PORT = Number(process.env.WF_API_PORT || 8787);
 
@@ -16,6 +25,7 @@ function classifyError(err) {
   const msg = String(err?.message || err || 'unknown_error');
   if (msg.startsWith('invalid_pack_id:')) return { status: 400, code: 'invalid_pack_id', message: msg };
   if (msg.startsWith('workflow_not_found:')) return { status: 404, code: 'workflow_not_found', message: msg };
+  if (msg.startsWith('pipe_already_exists:')) return { status: 409, code: 'pipe_already_exists', message: msg };
   if (msg.startsWith('input_validation_error:')) {
     return {
       status: 400,
@@ -68,6 +78,26 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'application/yaml; charset=utf-8' });
       res.end(body);
       return;
+    }
+
+    if (req.method === 'GET' && u.pathname === '/runs') {
+      const limit = Number(u.searchParams.get('limit') || 20);
+      const runs = await listRuns({ limit });
+      return json(res, 200, { ok: true, runs });
+    }
+
+    if (req.method === 'GET' && u.pathname === '/runs/summary') {
+      const limit = Number(u.searchParams.get('limit') || 50);
+      const out = await summarizeRuns({ limit });
+      return json(res, 200, { ok: true, ...out });
+    }
+
+    if (req.method === 'POST' && u.pathname === '/workflows/scaffold') {
+      const body = await readJsonBody(req);
+      const packId = body?.packId;
+      const baseDir = body?.baseDir || 'pipes';
+      const out = await scaffoldPipe(packId, { baseDir });
+      return json(res, 200, { ok: true, result: out });
     }
 
     if (req.method === 'GET' && (u.pathname === '/workflows' || u.pathname === '/pipes')) {
